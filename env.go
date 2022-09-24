@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unsafe"
 )
 
 // nolint: gochecknoglobals
@@ -223,14 +224,16 @@ func doParse(ref reflect.Value, funcMap map[reflect.Type]ParserFunc, opts []Opti
 }
 
 func doParseField(refField reflect.Value, refTypeField reflect.StructField, funcMap map[reflect.Type]ParserFunc, opts []Options) error {
-	if !refField.CanSet() {
-		return nil
-	}
 	if reflect.Ptr == refField.Kind() && refField.Elem().Kind() == reflect.Struct {
+		if !refField.CanSet() {
+			return nil
+		}
 		return ParseWithFuncs(refField.Interface(), funcMap, optsWithPrefix(refTypeField, opts)...)
 	}
 	if reflect.Struct == refField.Kind() && refField.CanAddr() && refField.Type().Name() == "" {
-		return ParseWithFuncs(refField.Addr().Interface(), funcMap, optsWithPrefix(refTypeField, opts)...)
+		if refField.CanSet() {
+			return ParseWithFuncs(refField.Addr().Interface(), funcMap, optsWithPrefix(refTypeField, opts)...)
+		}
 	}
 	value, err := get(refTypeField, opts)
 	if err != nil {
@@ -238,6 +241,9 @@ func doParseField(refField reflect.Value, refTypeField reflect.StructField, func
 	}
 
 	if value != "" {
+		if !refField.CanSet() {
+			refField = reflect.NewAt(refField.Type(), unsafe.Pointer(refField.UnsafeAddr())).Elem()
+		}
 		return set(refField, refTypeField, value, funcMap)
 	}
 
