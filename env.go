@@ -13,6 +13,40 @@ import (
 	"unsafe"
 )
 
+const (
+	BreadCrumb   = "."
+	EnvTag       = "env"
+	EnvPrefixTag = "envPrefix"
+)
+
+func GetTag(i interface{}, breadcrumbs string) string {
+	jumps := strings.Split(breadcrumbs, ".")
+	ptrRef := reflect.ValueOf(i)
+	if ptrRef.Kind() != reflect.Ptr {
+		return ""
+	}
+	ref := ptrRef.Elem()
+	if ref.Kind() != reflect.Struct {
+		return ""
+	}
+	rt := ref.Type()
+	var tag, prefix, result string
+	for _, name := range jumps {
+		st, ok := rt.FieldByName(name)
+		if !ok {
+			return ""
+		}
+
+		tag = st.Tag.Get(EnvTag)
+		prefix = st.Tag.Get(EnvPrefixTag)
+		result += prefix + tag
+
+		rt = st.Type
+	}
+
+	return result
+}
+
 // nolint: gochecknoglobals
 var (
 	// ErrNotAStructPtr is returned if you pass something that is not a pointer to a
@@ -131,7 +165,7 @@ func configure(opts []Options) []Options {
 
 	// Created options with defaults.
 	opt := Options{
-		TagName:     "env",
+		TagName:     EnvTag,
 		Environment: toMap(os.Environ()),
 		configured:  true,
 	}
@@ -488,7 +522,7 @@ func newNoParserError(sf reflect.StructField) error {
 func optsWithPrefix(field reflect.StructField, opts []Options) []Options {
 	subOpts := make([]Options, len(opts))
 	copy(subOpts, opts)
-	if prefix := field.Tag.Get("envPrefix"); prefix != "" {
+	if prefix := field.Tag.Get(EnvPrefixTag); prefix != "" {
 		subOpts[0].Prefix += prefix
 	}
 	return subOpts
